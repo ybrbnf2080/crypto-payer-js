@@ -151,7 +151,7 @@ export class InvoceDB {
     }
 
     async save(invoice: CreateInvoce) {
-        await this.db.create(invoice)
+        return await this.db.create(invoice)
     }
     async getActive(): Promise<Invoice[]> {
         const result = await this.db.getByStatus(INVOCE_STATUS.AWAIT)
@@ -168,17 +168,17 @@ export class InvoceDB {
         return result
     }
     async setPaid(id: number, hash: string,) {
-        await this.db.update(id, { hash: hash, status: INVOCE_STATUS.PAYED })
+        return await this.db.update(id, { hash: hash, status: INVOCE_STATUS.PAYED })
     }
 
     async setFinish(id: number,) {
         const wallet = await this.db.update(id, { status: INVOCE_STATUS.FINISH })
-        await this.db.unlockWallet(wallet.index_key)
+        return await this.db.unlockWallet(wallet.index_key)
     }
 
     async setDeny(id: number,) {
         const wallet = await this.db.update(id, { status: INVOCE_STATUS.DENY })
-        await this.db.unlockWallet(wallet.index_key)
+        return await this.db.unlockWallet(wallet.index_key)
     }
 
 
@@ -193,13 +193,13 @@ export class InvoceDB {
         id: number,
         hash: string,
     ) {
-        await this.db.update(id, { hash: hash, status: INVOCE_STATUS.OUT_FINISH })
+        return await this.db.update(id, { hash: hash, status: INVOCE_STATUS.OUT_FINISH })
     }
     async setOutError(
         id: number,
         error: string
     ) {
-        await this.db.update(id, { status: INVOCE_STATUS.OUT_ERROR, hash: error })
+        return await this.db.update(id, { status: INVOCE_STATUS.OUT_ERROR, hash: error })
     }
 
 }

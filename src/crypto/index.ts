@@ -35,16 +35,16 @@ export class BlockChainProvider {
     }
 
 
-    async withdraw(index_key:number,wallet: string, value: number, currency: CURRENCY_TYPE): Promise<PaymentCheckResult> {
+    async withdraw(index_key: number, wallet: string, value: number, currency: CURRENCY_TYPE): Promise<PaymentCheckResult> {
         switch (currency) {
             case CURRENCY.TRX:
             case CURRENCY.USDT_TRC20:
-                return this.tron_provider.withdraw(index_key,wallet, value, currency)
+                return this.tron_provider.withdraw(index_key, wallet, value, currency)
                 break;
 
             case CURRENCY.ETH:
             case CURRENCY.USDT_ETH:
-                return this.evm_provider.withdraw(index_key,wallet, value, currency)
+                return this.evm_provider.withdraw(index_key, wallet, value, currency)
                 break;
         }
 

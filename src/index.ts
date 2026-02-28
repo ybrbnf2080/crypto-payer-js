@@ -25,9 +25,11 @@ export type IPaidCallback = (v: Invoice) => Promise<boolean>
 export class PaymentAction {
     public invoce_store: InvoceDB
     public blockchainProvider: BlockChainProvider
-    constructor(db: PaymentStorage, config: BlockChainConfig,) {
+    public invoce_ttl: number
+    constructor(db: PaymentStorage, config: BlockChainConfig, invoce_ttl_minute: number = 10) {
         this.invoce_store = new InvoceDB(db)
         this.blockchainProvider = new BlockChainProvider(config)
+        this.invoce_ttl = invoce_ttl_minute * 60 * 1000
     }
 
     public available_currency() {
@@ -42,7 +44,6 @@ export class PaymentAction {
         let address = await this.invoce_store.getFreeWallet()
 
         const wallet = await this.blockchainProvider.createNewInvoce(String(address.id), create_invoce.currency)
-
         const invoice = {
             amount: create_invoce.amount,
             callback_data: create_invoce.callback_data,
@@ -51,8 +52,9 @@ export class PaymentAction {
             status: INVOCE_STATUS.AWAIT,
             wallet: wallet,
         }
-        await this.invoce_store.save(invoice)
-        return invoice
+        const invoce_db = await this.invoce_store.save(invoice)
+
+        return invoce_db
     }
 
     public async withdraw_create(withdraw_request: CreateWithdrawRequest) {
@@ -86,16 +88,25 @@ export class PaymentScheduler extends PaymentAction {
     public async payment_wait() {
         await Promise.all((await this.invoce_store.getActive()).map(
             async (v: Invoice) => {
-                const status = await this.blockchainProvider.getPayStatus(v.wallet, v.amount, v.currency)
-                if (v.id) {
-                    try {
-                        if (status?.paid && status?.txHash) {
-                            await this.invoce_store.setPaid(v.id, status.txHash)
-                        }
-
-                    } catch (error) {
-                        console.error(error)
+                try {
+                    if (new Date(v.created_at) <= new Date(Date.now() - this.invoce_ttl)) {
+                        await this.invoce_store.setDeny(v.id)
                     }
+                    const status = await this.blockchainProvider.getPayStatus(v.wallet, v.amount, v.currency)
+                    if (v.id) {
+                        try {
+                            if (status?.paid && status?.txHash) {
+                                await this.invoce_store.setPaid(v.id, status.txHash)
+                            }
+
+                        } catch (error) {
+                            console.error(error)
+                        }
+                    }
+
+                } catch (error) {
+                    console.error(error)
+
                 }
             }
         ));
@@ -147,7 +158,9 @@ export class PaymentScheduler extends PaymentAction {
         cron.schedule(cron_period || "* * * * *", async () => {
             await this.payment_wait();
             await this.confirm_wait();
+            await this.withdraw_wait()
         })
+        return `Confirm_started with ${cron_period || "* * * * *"}`
     }
 }
 
