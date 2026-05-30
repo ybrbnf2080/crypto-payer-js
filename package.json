@@ -8,6 +8,10 @@
   "main": "lib/index.js",
   "module": "lib/index.esm.js",
   "types": "lib/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ybrbnf2080/crypto-payer-js"
+  },
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build"
@@ -24,7 +28,10 @@
     "tronweb": "^6.1.1",
     "typescript": "^5.9.3"
   },
-  "keywords": ["crypto", "payment"],
+  "keywords": [
+    "crypto",
+    "payment"
+  ],
   "devDependencies": {
     "@types/node": "^25.0.10"
   }
