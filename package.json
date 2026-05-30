@@ -1,9 +1,9 @@
 {
-  "name": "crypto-payer",
-  "version": "1.0.0",
+  "name": "crypto-payer-js",
+  "version": "0.0.1",
   "description": "",
-  "license": "ISC",
-  "author": "",
+  "license": "MIT",
+  "author": "akane_tendo",
   "type": "commonjs",
   "main": "lib/index.js",
   "module": "lib/index.esm.js",
@@ -24,6 +24,7 @@
     "tronweb": "^6.1.1",
     "typescript": "^5.9.3"
   },
+  "keywords": ["crypto", "payment"],
   "devDependencies": {
     "@types/node": "^25.0.10"
   }
