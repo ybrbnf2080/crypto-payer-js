@@ -13,6 +13,8 @@ export interface BlockChainConfig {
     evm_api_key: string,
     EVM_RPC?: string,
     EVM_RESERVE_ETH?: number,
+    TRON_RPC?: string,
+    TRON_DERIVATION_PATH?: string,
     TRON_RESERVE_TRX?: number,
     MNEMONIC: string,
 }
@@ -22,8 +24,8 @@ export class BlockChainProvider {
 
 
     constructor(config: BlockChainConfig) {
-        this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC, config.EVM_RPC || "wss://ethereum-rpc.publicnode.com", config.EVM_RESERVE_ETH)
-        this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX)
+        this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC, config.EVM_RPC || "https://eth.drpc.org", config.EVM_RESERVE_ETH)
+        this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX, config.TRON_RPC || "https://tron.api.pocket.network", config.TRON_DERIVATION_PATH)
     }
     available_currency() {
         return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.ETH]: "Etherium ETH", [CURRENCY.USDT_ETH]: "Etherium USDT" }
@@ -69,6 +71,8 @@ export class BlockChainProvider {
     }
 
     async claim(outgoing_wallet_evm: string, outgoing_wallet_tron: string, walletCount?: number) {
+        console.log("start claoim ")
+
         await this.evm_provider.claim(outgoing_wallet_evm, walletCount)
         await this.tron_provider.claim(outgoing_wallet_tron, walletCount)
     }

@@ -6,6 +6,8 @@ import * as bip39 from "bip39"
 import bip32, { BIP32API } from "bip32"
 import * as ecc from "tiny-secp256k1"
 import { CURRENCY_TYPE, PaymentCheckResult, PaymentProvider } from "./interface.ts"
+import { sleep } from "tronweb/utils"
+
 
 const TRONSCAN_API = "https://apilist.tronscan.org/api/transaction"
 const USDT_TRC20_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t"
@@ -42,17 +44,20 @@ const TOKEN_ABI = [
 export class TronProvider implements PaymentProvider {
 
   private bip32Root: BIP32API
-  private TRON_DERIVATION_PATH = "m/44'/195'/0'"
+  private TRON_DERIVATION_PATH: string
   private TRON_MNEMONIC: string
   private TRON_RESERVE_TRX: number
+  private TRON_RPC_HOST: string
   private tronWeb: InstanceType<typeof TronWeb.TronWeb>
   readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.TRX, CURRENCY.USDT_TRC20]
-  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1) {
+  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1, TRON_RPC_HOST: string = "https://tron.api.pocket.network", TRON_DERIVATION_PATH: string = "m/44'/195'/0'") {
     this.TRON_MNEMONIC = TRON_MNEMONIC
     this.TRON_RESERVE_TRX = TRON_RESERVE_TRX
+    this.TRON_DERIVATION_PATH = TRON_DERIVATION_PATH
     this.bip32Root = bip32(ecc)
+    this.TRON_RPC_HOST = TRON_RPC_HOST
     this.tronWeb = new TronWeb.TronWeb({
-      fullHost: "https://api.trongrid.io",
+      fullHost: TRON_RPC_HOST,
     })
   }
 
@@ -76,7 +81,7 @@ export class TronProvider implements PaymentProvider {
   ): Promise<PaymentCheckResult> {
     const { privateKey, address } = await this.getAccount(index_key)
     const tronWeb = new TronWeb.TronWeb({
-      fullHost: "https://api.trongrid.io",
+      fullHost: this.TRON_RPC_HOST,
       privateKey: privateKey
     })
 
@@ -113,7 +118,7 @@ export class TronProvider implements PaymentProvider {
     const { privateKey, address } = await this.getAccount(index_key)
 
     const tronWeb = new TronWeb.TronWeb({
-      fullHost: "https://api.trongrid.io",
+      fullHost: this.TRON_RPC_HOST,
       privateKey: privateKey
     })
 
@@ -172,6 +177,7 @@ export class TronProvider implements PaymentProvider {
     value: number,
     startTimeStamp: number
   ): Promise<PaymentCheckResult> {
+    await sleep(1000)
     const since = startTimeStamp
     const requiredSun = value * 1_000_000
 
@@ -211,6 +217,7 @@ export class TronProvider implements PaymentProvider {
     value: number,
     startTimeStamp: number
   ): Promise<PaymentCheckResult> {
+    await sleep(1000)
     const since = startTimeStamp
     const required = value * 1_000_000 // USDT decimals
 
@@ -304,7 +311,7 @@ export class TronProvider implements PaymentProvider {
       const { privateKey, address } = await this.getAccount(String(i))
 
       const tronWeb = new TronWeb.TronWeb({
-        fullHost: "https://api.trongrid.io",
+        fullHost: this.TRON_RPC_HOST,
         privateKey: privateKey
       })
 
@@ -334,8 +341,10 @@ export class TronProvider implements PaymentProvider {
       }
 
       const remainingTrx = await tronWeb.trx.getBalance(address)
+      const txFeeEstimate = 200_000 // ~0.2 TRX for bandwidth/energy
       const reserveSun = Math.floor(this.TRON_RESERVE_TRX * 1_000_000)
-      const sweepAmount = remainingTrx - reserveSun
+      const sweepAmount = remainingTrx - txFeeEstimate - reserveSun
+
       if (sweepAmount > 0) {
         try {
           const tx = await tronWeb.transactionBuilder.sendTrx(
@@ -352,6 +361,7 @@ export class TronProvider implements PaymentProvider {
           console.error(`TRX claim error for wallet ${i}:`, e)
         }
       }
+      await sleep(1000)
     }
   }
 

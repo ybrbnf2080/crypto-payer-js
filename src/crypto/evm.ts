@@ -6,6 +6,7 @@ import bip32, { BIP32API } from "bip32"
 import * as ecc from "tiny-secp256k1"
 import * as ethers from "ethers";
 import { CURRENCY_TYPE, PaymentCheckResult, PaymentProvider } from "./interface.ts"
+import { sleep } from "tronweb/utils"
 interface EvmTx {
     hash: string
     from: string
@@ -60,6 +61,8 @@ export class EvmProvider implements PaymentProvider {
         toAddress: string,
         amountETH: number
     ): Promise<PaymentCheckResult> {
+        await sleep(1000)
+
         const child = await this.getWallet(index_key)
         if (!child.privateKey) {
             throw new Error("Failed to derive private key")
@@ -90,6 +93,8 @@ export class EvmProvider implements PaymentProvider {
         toAddress: string,
         amountUSDT: number
     ): Promise<PaymentCheckResult> {
+        await sleep(1000)
+
         const child = await this.getWallet(index_key)
         if (!child.privateKey) {
             throw new Error("Failed to derive private key")
@@ -153,6 +158,7 @@ export class EvmProvider implements PaymentProvider {
         txHash?: string
         amount?: number
     }> {
+        await sleep(1000)
         const since = startTimeStamp
         const requiredWei = BigInt(Math.floor(value * 1e18))
 
@@ -206,6 +212,7 @@ export class EvmProvider implements PaymentProvider {
         txHash?: string
         amount?: number
     }> {
+        await sleep(1000)
         const since = startTimeStamp
         // USDT has 6 decimals
         const requiredAmount = BigInt(Math.floor(value * 1e6))
@@ -260,6 +267,7 @@ export class EvmProvider implements PaymentProvider {
         ]
 
         for (let i = 0; i < walletCount; i++) {
+            await sleep(1000)
             const child = await this.getWallet(String(i))
             if (!child.privateKey) continue
 
@@ -289,7 +297,12 @@ export class EvmProvider implements PaymentProvider {
 
             // Sweep remaining ETH
             const remainingEth = await provider.getBalance(wallet.address)
-            const ethTxGasCost = gasPrice * BigInt(21000)
+            const ethTxGasEstimate = await provider.estimateGas({
+                from: wallet.address,
+                to: outgoing_wallet,
+                value: remainingEth,
+            })
+            const ethTxGasCost = gasPrice * ethTxGasEstimate
             const reserveWei = BigInt(Math.floor(this.EVM_RESERVE_ETH * 1e18))
             const sweepAmount = remainingEth - ethTxGasCost - reserveWei
             if (sweepAmount > 0n) {

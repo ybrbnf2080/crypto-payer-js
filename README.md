@@ -34,6 +34,10 @@ const db = new InMemoryPaymentStorage();
 const config = {
   evm_api_key: "YOUR_ETHERSCAN_API_KEY",
   MNEMONIC: "your twelve word mnemonic phrase here",
+  EVM_RPC: "optional your RPC",
+  EVM_RESERVE_ETH: "reserve after claim",
+  TRON_RPC: "optional your RPC",
+  TRON_RESERVE_TRX: "reserve after claim",
 };
 
 const onPaid = async (invoice) => {
@@ -145,48 +149,48 @@ class PostgresStorage implements PaymentStorage {
 
 ### `PaymentAction`
 
-| Method | Description |
-|---|---|
-| `available_currency()` | List currencies available for incoming payments |
-| `withdraw_available_currency()` | List currencies available for withdrawals |
-| `invoce_create(req)` | Create a new payment invoice with a derived wallet address |
-| `withdraw_create(req)` | Create a withdrawal request |
+| Method                          | Description                                                |
+| ------------------------------- | ---------------------------------------------------------- |
+| `available_currency()`          | List currencies available for incoming payments            |
+| `withdraw_available_currency()` | List currencies available for withdrawals                  |
+| `invoce_create(req)`            | Create a new payment invoice with a derived wallet address |
+| `withdraw_create(req)`          | Create a withdrawal request                                |
 
 ### `PaymentScheduler` (extends `PaymentAction`)
 
-| Method | Description |
-|---|---|
-| `payment_wait()` | Scan active invoices for incoming transactions |
-| `confirm_wait()` | Process paid invoices through the paid callback |
-| `withdraw_wait()` | Process withdrawal requests through the withdraw callback |
+| Method                   | Description                                                    |
+| ------------------------ | -------------------------------------------------------------- |
+| `payment_wait()`         | Scan active invoices for incoming transactions                 |
+| `confirm_wait()`         | Process paid invoices through the paid callback                |
+| `withdraw_wait()`        | Process withdrawal requests through the withdraw callback      |
 | `start_scheduler(cron?)` | Start automatic periodic processing (defaults to every minute) |
 
 ### `PaymentStorage` interface
 
-| Method | Description |
-|---|---|
-| `create(data)` | Save a new invoice |
-| `getByStatus(status)` | Get invoices by status |
+| Method                            | Description                         |
+| --------------------------------- | ----------------------------------- |
+| `create(data)`                    | Save a new invoice                  |
+| `getByStatus(status)`             | Get invoices by status              |
 | `getFreeWalletsAndLockOrCreate()` | Get a free wallet index and lock it |
-| `unlockWallet(id)` | Unlock/release a wallet index |
-| `update(id, data)` | Update invoice fields |
-| `updateByCallback_data(cb, data)` | Update invoice by callback data |
+| `unlockWallet(id)`                | Unlock/release a wallet index       |
+| `update(id, data)`                | Update invoice fields               |
+| `updateByCallback_data(cb, data)` | Update invoice by callback data     |
 
 ### Supported currencies
 
-| Currency | Blockchain | Network |
-|---|---|---|
-| `TRX` | TRON | TRC20 |
-| `USDT_TRC20` | TRON | TRC20 |
-| `ETH` | Ethereum | ERC20 |
-| `USDT_ETH` | Ethereum | ERC20 |
+| Currency     | Blockchain | Network |
+| ------------ | ---------- | ------- |
+| `TRX`        | TRON       | TRC20   |
+| `USDT_TRC20` | TRON       | TRC20   |
+| `ETH`        | Ethereum   | ERC20   |
+| `USDT_ETH`   | Ethereum   | ERC20   |
 
 ## Configuration
 
-| Parameter | Description |
-|---|---|
+| Parameter     | Description                                               |
+| ------------- | --------------------------------------------------------- |
 | `evm_api_key` | Etherscan API key (for ETH/USDT_ETH payment verification) |
-| `MNEMONIC` | BIP39 mnemonic phrase for HD wallet derivation |
+| `MNEMONIC`    | BIP39 mnemonic phrase for HD wallet derivation            |
 
 ## License
 
