@@ -166,7 +166,7 @@ export class TronProvider implements PaymentProvider {
       case CURRENCY.TRX:
         return await this.getPayStatusTRX(wallet, value, startTimeStamp)
       case CURRENCY.USDT_TRC20:
-        return await this.getPayStatusTRX(wallet, value, startTimeStamp)
+        return await this.getPayStatusUSDT(wallet, value, startTimeStamp)
 
       default:
         throw new Error("This currency not implement")
