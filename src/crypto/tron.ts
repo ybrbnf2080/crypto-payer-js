@@ -321,12 +321,12 @@ export class TronProvider implements PaymentProvider {
       const contract = tronWeb.contract(TOKEN_ABI, USDT_TRC20_CONTRACT)
       const usdtBalance = await contract.balanceOf(address).call()
 
-      if (usdtBalance > 0 && trxBalance > 100_000_000) {
+      if (usdtBalance > 0 && trxBalance > 10_000_000) {
         try {
           const txID = await contract
             .transfer(outgoing_wallet, usdtBalance)
             .send({
-              feeLimit: 100_000_000,
+              feeLimit: 10_000_000,
               callValue: 0,
               shouldPollResponse: false,
             })
