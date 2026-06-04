@@ -28,7 +28,7 @@ interface EvmTokenTx {
 
 export class EvmProvider implements PaymentProvider {
     private bip32Root: BIP32API
-    private EVM_DERIVATION_PATH = "m/44'/60'/0'"
+    private EVM_DERIVATION_PATH = "m/44'/60'/0'/0"
     private ETHERSCAN_API_KEY: string
     private EVM_MNEMONIC: string
     private EVM_RPC: string

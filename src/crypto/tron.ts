@@ -50,7 +50,7 @@ export class TronProvider implements PaymentProvider {
   private TRON_RPC_HOST: string
   private tronWeb: InstanceType<typeof TronWeb.TronWeb>
   readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.TRX, CURRENCY.USDT_TRC20]
-  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1, TRON_RPC_HOST: string = "https://tron.api.pocket.network", TRON_DERIVATION_PATH: string = "m/44'/195'/0'") {
+  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1, TRON_RPC_HOST: string = "https://tron.api.pocket.network", TRON_DERIVATION_PATH: string = "m/44'/195'/0'/0") {
     this.TRON_MNEMONIC = TRON_MNEMONIC
     this.TRON_RESERVE_TRX = TRON_RESERVE_TRX
     this.TRON_DERIVATION_PATH = TRON_DERIVATION_PATH
