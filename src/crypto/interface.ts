@@ -5,6 +5,8 @@ export interface PaymentCheckResult {
     paid: boolean
     txHash?: string
     amount?: number
+    timestamp?: number
+
 }
 
 export interface PaymentProvider {
@@ -43,7 +45,7 @@ export interface PaymentProvider {
         currency: CURRENCY_TYPE,
         options: {
             token_contract?: string,
-            minutesBack?: number
+            startTimeStamp?: number
         }
     ): Promise<PaymentCheckResult>
 }

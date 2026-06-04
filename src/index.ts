@@ -57,6 +57,10 @@ export class PaymentAction {
         return invoce_db
     }
 
+    public async claim(outgoing_wallet_evm: string, outgoing_wallet_tron: string, walletCount?: number) {
+        return await this.blockchainProvider.claim(outgoing_wallet_evm, outgoing_wallet_tron, walletCount)
+    }
+
     public async withdraw_create(withdraw_request: CreateWithdrawRequest) {
         this.blockchainProvider.checkWithdrawAvalibeCurrency(withdraw_request.currency)
 
@@ -92,9 +96,10 @@ export class PaymentScheduler extends PaymentAction {
                     if (new Date(v.created_at) <= new Date(Date.now() - this.invoce_ttl)) {
                         await this.invoce_store.setDeny(v.id)
                     }
-                    const status = await this.blockchainProvider.getPayStatus(v.wallet, v.amount, v.currency)
+                    const status = await this.blockchainProvider.getPayStatus(v.wallet, v.amount, v.currency, Number(v.created_at))
                     if (v.id) {
                         try {
+
                             if (status?.paid && status?.txHash) {
                                 await this.invoce_store.setPaid(v.id, status.txHash)
                             }
@@ -151,14 +156,20 @@ export class PaymentScheduler extends PaymentAction {
         ));
     }
 
-    public start_scheduler(cron_period?: string | undefined) {
+    public start_scheduler(cron_period?: string | undefined, outgoing_wallet_evm?: string, outgoing_wallet_tron?: string, walletCount?: number) {
         this.payment_wait();
         this.withdraw_wait()
         this.confirm_wait();
+        if (outgoing_wallet_evm || outgoing_wallet_tron) {
+            this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", walletCount)
+        }
         cron.schedule(cron_period || "* * * * *", async () => {
             await this.payment_wait();
             await this.confirm_wait();
             await this.withdraw_wait()
+            if (outgoing_wallet_evm || outgoing_wallet_tron) {
+                await this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", walletCount)
+            }
         })
         return `Confirm_started with ${cron_period || "* * * * *"}`
     }

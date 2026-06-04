@@ -27,22 +27,96 @@ interface EvmTokenTx {
 
 export class EvmProvider implements PaymentProvider {
     private bip32Root: BIP32API
-    private EVM_DERIVATION_PATH = "m/44'/60'/0'/0"
+    private EVM_DERIVATION_PATH = "m/44'/60'/0'"
     private ETHERSCAN_API_KEY: string
     private EVM_MNEMONIC: string
+    private EVM_RPC: string
+    private EVM_RESERVE_ETH: number
     readonly chain_id: number
     readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.ETH, CURRENCY.USDT_ETH]
 
-    constructor(api_key: string, chain_id: number, EVM_MNEMONIC: string) {
+    constructor(api_key: string, chain_id: number, EVM_MNEMONIC: string, EVM_RPC: string, EVM_RESERVE_ETH: number = 0) {
         this.chain_id = chain_id
         this.EVM_MNEMONIC = EVM_MNEMONIC
         this.ETHERSCAN_API_KEY = api_key
+        this.EVM_RPC = EVM_RPC
+        this.EVM_RESERVE_ETH = EVM_RESERVE_ETH
         this.bip32Root = bip32(ecc)
     }
 
     async withdraw(index_key: number, out_wallet: string, amount: number, currency: CURRENCY_TYPE) {
-        throw new Error("currency not supported")
-        return {} as PaymentCheckResult
+        switch (currency) {
+            case CURRENCY.ETH:
+                return await this.withdrawETH(String(index_key), out_wallet, amount)
+            case CURRENCY.USDT_ETH:
+                return await this.withdrawUSDT(String(index_key), out_wallet, amount)
+            default:
+                throw new Error("currency not supported")
+        }
+    }
+
+    async withdrawETH(
+        index_key: string,
+        toAddress: string,
+        amountETH: number
+    ): Promise<PaymentCheckResult> {
+        const child = await this.getWallet(index_key)
+        if (!child.privateKey) {
+            throw new Error("Failed to derive private key")
+        }
+
+        const privateKeyHex = Buffer.from(child.privateKey).toString("hex")
+        const provider = new ethers.JsonRpcProvider(this.EVM_RPC)
+        const wallet = new ethers.Wallet(privateKeyHex, provider)
+
+        const amountWei = BigInt(Math.floor(amountETH * 1e18))
+
+        const tx = await wallet.sendTransaction({
+            to: toAddress,
+            value: amountWei,
+        })
+
+        await tx.wait()
+
+        return {
+            txHash: tx.hash,
+            paid: true,
+            amount: amountETH,
+        }
+    }
+
+    async withdrawUSDT(
+        index_key: string,
+        toAddress: string,
+        amountUSDT: number
+    ): Promise<PaymentCheckResult> {
+        const child = await this.getWallet(index_key)
+        if (!child.privateKey) {
+            throw new Error("Failed to derive private key")
+        }
+
+        const privateKeyHex = Buffer.from(child.privateKey).toString("hex")
+        const provider = new ethers.JsonRpcProvider(this.EVM_RPC)
+        const wallet = new ethers.Wallet(privateKeyHex, provider)
+
+        const USDT_CONTRACT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        const amount = BigInt(Math.floor(amountUSDT * 1_000_000))
+
+        const erc20Abi = [
+            "function transfer(address to, uint256 amount) returns (bool)",
+        ]
+
+        const contract = new ethers.Contract(USDT_CONTRACT, erc20Abi, wallet)
+        // @ts-ignore
+        const tx = await contract.transfer(toAddress, amount)
+
+        await tx.wait()
+
+        return {
+            txHash: tx.hash,
+            paid: true,
+            amount: amountUSDT,
+        }
     }
 
     async getPayStatus(
@@ -51,19 +125,19 @@ export class EvmProvider implements PaymentProvider {
         currency: CURRENCY_TYPE,
         options: {
             token_contract?: string,
-            minutesBack?: number
+            startTimeStamp: number
         }
     ): Promise<{
         paid: boolean
         txHash?: string
         amount?: number
     }> {
-        const { minutesBack, token_contract } = options
+        const { startTimeStamp, token_contract } = options
         switch (currency) {
             case CURRENCY.ETH:
-                return await this.getPayStatusETH(wallet, value, minutesBack)
+                return await this.getPayStatusETH(wallet, value, startTimeStamp)
             case CURRENCY.USDT_ETH:
-                return await this.getPayStatusToken(wallet, value, "0xdAC17F958D2ee523a2206206994597C13D831ec7", minutesBack)
+                return await this.getPayStatusToken(wallet, value, "0xdAC17F958D2ee523a2206206994597C13D831ec7", startTimeStamp)
 
             default:
                 throw new Error("This currency not implement")
@@ -73,13 +147,13 @@ export class EvmProvider implements PaymentProvider {
     async getPayStatusETH(
         wallet: string,
         value: number,
-        minutesBack = 30
+        startTimeStamp: number,
     ): Promise<{
         paid: boolean
         txHash?: string
         amount?: number
     }> {
-        const since = Date.now() - minutesBack * 60 * 1000
+        const since = startTimeStamp
         const requiredWei = BigInt(Math.floor(value * 1e18))
 
         const { data } = await axios.get(
@@ -126,14 +200,13 @@ export class EvmProvider implements PaymentProvider {
         wallet: string,
         value: number,           // USDT
         token_contract: string,
-        minutesBack = 30
+        startTimeStamp: number,
     ): Promise<{
         paid: boolean
         txHash?: string
         amount?: number
     }> {
-        const since = Date.now() - minutesBack * 60 * 1000
-
+        const since = startTimeStamp
         // USDT has 6 decimals
         const requiredAmount = BigInt(Math.floor(value * 1e6))
 
@@ -178,9 +251,55 @@ export class EvmProvider implements PaymentProvider {
         return { paid: false }
     }
 
-    async claim(index_key: string) {
-        const wallet = await this.getWallet(index_key)
+    async claim(outgoing_wallet: string, walletCount: number = 10): Promise<void> {
+        const provider = new ethers.JsonRpcProvider(this.EVM_RPC)
+        const USDT_CONTRACT = "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+        const erc20Abi = [
+            "function balanceOf(address) view returns (uint256)",
+            "function transfer(address,uint256) returns (bool)",
+        ]
 
+        for (let i = 0; i < walletCount; i++) {
+            const child = await this.getWallet(String(i))
+            if (!child.privateKey) continue
+
+            const privateKeyHex = Buffer.from(child.privateKey).toString("hex")
+            const wallet = new ethers.Wallet(privateKeyHex, provider)
+
+            const ethBalance = await provider.getBalance(wallet.address)
+            if (ethBalance === 0n) continue
+
+            const feeData = await provider.getFeeData()
+            const gasPrice = feeData.gasPrice ?? BigInt(1e10)
+
+            // Sweep USDT if any
+            const usdtContract = new ethers.Contract(USDT_CONTRACT, erc20Abi, wallet)
+            // @ts-ignore
+            const usdtBalance = await usdtContract.balanceOf(wallet.address)
+            if (usdtBalance > 0n) {
+                // @ts-ignore
+                const usdtGasEstimate = await usdtContract.transfer.estimateGas(outgoing_wallet, usdtBalance)
+                const usdtGasCost = gasPrice * usdtGasEstimate
+                if (ethBalance > usdtGasCost) {
+                    // @ts-ignore
+                    const tx = await usdtContract.transfer(outgoing_wallet, usdtBalance)
+                    await tx.wait()
+                }
+            }
+
+            // Sweep remaining ETH
+            const remainingEth = await provider.getBalance(wallet.address)
+            const ethTxGasCost = gasPrice * BigInt(21000)
+            const reserveWei = BigInt(Math.floor(this.EVM_RESERVE_ETH * 1e18))
+            const sweepAmount = remainingEth - ethTxGasCost - reserveWei
+            if (sweepAmount > 0n) {
+                const tx = await wallet.sendTransaction({
+                    to: outgoing_wallet,
+                    value: sweepAmount,
+                })
+                await tx.wait()
+            }
+        }
     }
     async getWallet(index_key: string) {
         if (!this.EVM_MNEMONIC) {

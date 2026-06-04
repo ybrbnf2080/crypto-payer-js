@@ -11,6 +11,9 @@ const TOKENS = {
 
 export interface BlockChainConfig {
     evm_api_key: string,
+    EVM_RPC?: string,
+    EVM_RESERVE_ETH?: number,
+    TRON_RESERVE_TRX?: number,
     MNEMONIC: string,
 }
 export class BlockChainProvider {
@@ -19,14 +22,14 @@ export class BlockChainProvider {
 
 
     constructor(config: BlockChainConfig) {
-        this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC)
-        this.tron_provider = new TronProvider(config.MNEMONIC)
+        this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC, config.EVM_RPC || "wss://ethereum-rpc.publicnode.com", config.EVM_RESERVE_ETH)
+        this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX)
     }
     available_currency() {
         return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.ETH]: "Etherium ETH", [CURRENCY.USDT_ETH]: "Etherium USDT" }
     }
     withdraw_available_currency() {
-        return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", }
+        return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.ETH]: "Etherium ETH", [CURRENCY.USDT_ETH]: "Etherium USDT" }
     }
     checkWithdrawAvalibeCurrency(currency: CURRENCY_TYPE) {
         if (!Object.keys(this.withdraw_available_currency()).includes(currency)) {
@@ -49,20 +52,25 @@ export class BlockChainProvider {
         }
 
     }
-    async getPayStatus(wallet: string, value: number, currency: CURRENCY_TYPE): Promise<PaymentCheckResult> {
+    async getPayStatus(wallet: string, value: number, currency: CURRENCY_TYPE, invoceStartTimestamp: number): Promise<PaymentCheckResult> {
         switch (currency) {
             case CURRENCY.TRX:
             case CURRENCY.USDT_TRC20:
-                return this.tron_provider.getPayStatus(wallet, value, currency, {})
+                return this.tron_provider.getPayStatus(wallet, value, currency, { startTimeStamp: invoceStartTimestamp })
                 break;
 
             case CURRENCY.ETH:
             case CURRENCY.USDT_ETH:
-                return this.evm_provider.getPayStatus(wallet, value, currency, {})
+                return this.evm_provider.getPayStatus(wallet, value, currency, { startTimeStamp: invoceStartTimestamp })
                 break;
 
 
         }
+    }
+
+    async claim(outgoing_wallet_evm: string, outgoing_wallet_tron: string, walletCount?: number) {
+        await this.evm_provider.claim(outgoing_wallet_evm, walletCount)
+        await this.tron_provider.claim(outgoing_wallet_tron, walletCount)
     }
 
     async createNewInvoce(index_key: string, currency: CURRENCY_TYPE): Promise<string> {

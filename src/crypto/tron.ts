@@ -42,12 +42,14 @@ const TOKEN_ABI = [
 export class TronProvider implements PaymentProvider {
 
   private bip32Root: BIP32API
-  private TRON_DERIVATION_PATH = "m/44'/60'/0'/0"
+  private TRON_DERIVATION_PATH = "m/44'/195'/0'"
   private TRON_MNEMONIC: string
+  private TRON_RESERVE_TRX: number
   private tronWeb: InstanceType<typeof TronWeb.TronWeb>
   readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.TRX, CURRENCY.USDT_TRC20]
-  constructor(TRON_MNEMONIC: string) {
+  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1) {
     this.TRON_MNEMONIC = TRON_MNEMONIC
+    this.TRON_RESERVE_TRX = TRON_RESERVE_TRX
     this.bip32Root = bip32(ecc)
     this.tronWeb = new TronWeb.TronWeb({
       fullHost: "https://api.trongrid.io",
@@ -151,15 +153,15 @@ export class TronProvider implements PaymentProvider {
     currency: CURRENCY_TYPE,
     options: {
       token_contract?: string,
-      minutesBack?: number
+      startTimeStamp: number
     }
   ): Promise<PaymentCheckResult> {
-    const { minutesBack, token_contract } = options
+    const { startTimeStamp, token_contract } = options
     switch (currency) {
       case CURRENCY.TRX:
-        return await this.getPayStatusTRX(wallet, value, minutesBack)
+        return await this.getPayStatusTRX(wallet, value, startTimeStamp)
       case CURRENCY.USDT_TRC20:
-        return await this.getPayStatusTRX(wallet, value, minutesBack)
+        return await this.getPayStatusTRX(wallet, value, startTimeStamp)
 
       default:
         throw new Error("This currency not implement")
@@ -168,9 +170,9 @@ export class TronProvider implements PaymentProvider {
   async getPayStatusTRX(
     wallet: string,
     value: number,
-    minutesBack = 30
+    startTimeStamp: number
   ): Promise<PaymentCheckResult> {
-    const since = Date.now() - minutesBack * 60 * 1000
+    const since = startTimeStamp
     const requiredSun = value * 1_000_000
 
     const { data } = await axios.get(TRONSCAN_API, {
@@ -196,6 +198,7 @@ export class TronProvider implements PaymentProvider {
           paid: true,
           txHash: tx.hash,
           amount: tx.amount / 1_000_000,
+          timestamp: tx.timestamp
         }
       }
     }
@@ -206,9 +209,9 @@ export class TronProvider implements PaymentProvider {
   async getPayStatusUSDT(
     wallet: string,
     value: number,
-    minutesBack = 30
+    startTimeStamp: number
   ): Promise<PaymentCheckResult> {
-    const since = Date.now() - minutesBack * 60 * 1000
+    const since = startTimeStamp
     const required = value * 1_000_000 // USDT decimals
 
     const { data } = await axios.get(
@@ -236,6 +239,8 @@ export class TronProvider implements PaymentProvider {
           paid: true,
           txHash: tx.transaction_id,
           amount: amount / 1_000_000,
+          timestamp: tx.timestamp
+
         }
       }
     }
@@ -292,6 +297,62 @@ export class TronProvider implements PaymentProvider {
       throw new Error("Cant create wallet")
     }
     return address
+  }
+
+  async claim(outgoing_wallet: string, walletCount: number = 10): Promise<void> {
+    for (let i = 0; i < walletCount; i++) {
+      const { privateKey, address } = await this.getAccount(String(i))
+
+      const tronWeb = new TronWeb.TronWeb({
+        fullHost: "https://api.trongrid.io",
+        privateKey: privateKey
+      })
+
+      const trxBalance = await tronWeb.trx.getBalance(address)
+      if (trxBalance === 0) continue
+
+      const contract = tronWeb.contract(TOKEN_ABI, USDT_TRC20_CONTRACT)
+      const usdtBalance = await contract.balanceOf(address).call()
+
+      if (usdtBalance > 0 && trxBalance > 100_000_000) {
+        try {
+          const txID = await contract
+            .transfer(outgoing_wallet, usdtBalance)
+            .send({
+              feeLimit: 100_000_000,
+              callValue: 0,
+              shouldPollResponse: false,
+            })
+
+          const tx = await tronWeb.trx.getTransactionInfo(txID)
+          if (tx?.result == "FAILED") {
+            console.error(`USDT claim failed for wallet ${i}: ${txID}`)
+          }
+        } catch (e) {
+          console.error(`USDT claim error for wallet ${i}:`, e)
+        }
+      }
+
+      const remainingTrx = await tronWeb.trx.getBalance(address)
+      const reserveSun = Math.floor(this.TRON_RESERVE_TRX * 1_000_000)
+      const sweepAmount = remainingTrx - reserveSun
+      if (sweepAmount > 0) {
+        try {
+          const tx = await tronWeb.transactionBuilder.sendTrx(
+            outgoing_wallet,
+            sweepAmount as unknown as number,
+            address
+          )
+          const signedTx = await tronWeb.trx.sign(tx, privateKey)
+          const result = await tronWeb.trx.sendRawTransaction(signedTx)
+          if (!result.result) {
+            console.error(`TRX claim failed for wallet ${i}: ${JSON.stringify(result)}`)
+          }
+        } catch (e) {
+          console.error(`TRX claim error for wallet ${i}:`, e)
+        }
+      }
+    }
   }
 
   async getAddressForPay(
