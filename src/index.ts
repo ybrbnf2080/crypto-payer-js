@@ -26,10 +26,12 @@ export class PaymentAction {
     public invoce_store: InvoceDB
     public blockchainProvider: BlockChainProvider
     public invoce_ttl: number
+    public require_confirm_withdraw: boolean
     constructor(db: PaymentStorage, config: BlockChainConfig, invoce_ttl_minute: number = 10) {
         this.invoce_store = new InvoceDB(db)
         this.blockchainProvider = new BlockChainProvider(config)
         this.invoce_ttl = invoce_ttl_minute * 60 * 1000
+        this.require_confirm_withdraw = config.require_confirm_withdraw ?? false
     }
 
     public available_currency() {
@@ -57,8 +59,8 @@ export class PaymentAction {
         return invoce_db
     }
 
-    public async claim(outgoing_wallet_evm: string, outgoing_wallet_tron: string, walletCount?: number) {
-        return await this.blockchainProvider.claim(outgoing_wallet_evm, outgoing_wallet_tron, walletCount)
+    public async claim(outgoing_wallet_evm: string, outgoing_wallet_tron: string, outgoing_wallet_bsc?: string, outgoing_wallet_btc?: string, walletCount?: number) {
+        return await this.blockchainProvider.claim(outgoing_wallet_evm, outgoing_wallet_tron, outgoing_wallet_bsc, outgoing_wallet_btc, walletCount)
     }
 
     public async withdraw_create(withdraw_request: CreateWithdrawRequest) {
@@ -70,7 +72,7 @@ export class PaymentAction {
             callback_data: withdraw_request.callback_data,
             index_key: 0,
             currency: withdraw_request.currency,
-            status: INVOCE_STATUS.OUT_AWAIT,
+            status: this.require_confirm_withdraw ? INVOCE_STATUS.OUT_CONFIRM_WAIT : INVOCE_STATUS.OUT_AWAIT,
             wallet: withdraw_request.wallet,
         }
         await this.invoce_store.save(invoice)
@@ -161,14 +163,14 @@ export class PaymentScheduler extends PaymentAction {
         this.withdraw_wait()
         this.confirm_wait();
         if (outgoing_wallet_evm || outgoing_wallet_tron) {
-            this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", walletCount)
+            this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", undefined, undefined, walletCount)
         }
         cron.schedule(cron_period || "* * * * *", async () => {
             await this.payment_wait();
             await this.confirm_wait();
             await this.withdraw_wait()
             if (outgoing_wallet_evm || outgoing_wallet_tron) {
-                await this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", walletCount)
+                await this.claim(outgoing_wallet_evm || "", outgoing_wallet_tron || "", undefined, undefined, walletCount)
             }
         })
         return `Confirm_started with ${cron_period || "* * * * *"}`

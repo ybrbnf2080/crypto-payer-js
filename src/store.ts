@@ -3,6 +3,7 @@ export const INVOCE_STATUS = {
     PAYED: "PAYED",
     FINISH: "FINISH",
     DENY: "DENY",
+    OUT_CONFIRM_WAIT: "OUT_CONFIRM_WAIT",
     OUT_AWAIT: "OUT_AWAIT",
     OUT_FINISH: "OUT_FINISH",
     OUT_ERROR: "OUT_ERROR",
@@ -18,6 +19,9 @@ export const CURRENCY = {
     TRX: "TRX",
     ETH: "ETH",
     USDT_ETH: "USDT_ETH",
+    BNB: "BNB",
+    BSC_USDT: "BSC_USDT",
+    BTC: "BTC",
 } as const
 
 export type InvoiceStatus = keyof typeof INVOCE_STATUS

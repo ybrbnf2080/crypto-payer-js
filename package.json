@@ -1,6 +1,6 @@
 {
   "name": "crypto-payer-js",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "",
   "license": "MIT",
   "author": "akane_tendo",
@@ -23,6 +23,7 @@
     "axios": "^1.13.2",
     "bip32": "^5.0.0",
     "bip39": "^3.1.0",
+    "bitcoinjs-lib": "^6.1.6",
     "node-cron": "^4.2.1",
     "tiny-secp256k1": "^2.2.4",
     "tronweb": "^6.1.1",
