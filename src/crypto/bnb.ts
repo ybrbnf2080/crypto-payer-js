@@ -223,7 +223,7 @@ export class BnbProvider implements PaymentProvider {
 
         for (const tx of txs) {
             const txTime = Number(tx.timeStamp) * 1000
-            const amount = BigInt(tx.value)
+            const amount = BigInt(tx.value || 0)
 
             if (
                 tx.to?.toLowerCase() === wallet.toLowerCase() &&
