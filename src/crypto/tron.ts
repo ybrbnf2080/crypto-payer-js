@@ -308,60 +308,65 @@ export class TronProvider implements PaymentProvider {
 
   async claim(outgoing_wallet: string, walletCount: number = 10): Promise<void> {
     for (let i = 0; i < walletCount; i++) {
-      const { privateKey, address } = await this.getAccount(String(i))
+      try {
+        await sleep(1000)
+        const { privateKey, address } = await this.getAccount(String(i))
 
-      const tronWeb = new TronWeb.TronWeb({
-        fullHost: this.TRON_RPC_HOST,
-        privateKey: privateKey
-      })
+        const tronWeb = new TronWeb.TronWeb({
+          fullHost: this.TRON_RPC_HOST,
+          privateKey: privateKey
+        })
 
-      const trxBalance = await tronWeb.trx.getBalance(address)
-      if (trxBalance === 0) continue
+        const trxBalance = await tronWeb.trx.getBalance(address)
+        if (trxBalance === 0) continue
 
-      const contract = tronWeb.contract(TOKEN_ABI, USDT_TRC20_CONTRACT)
-      const usdtBalance = await contract.balanceOf(address).call()
+        const contract = tronWeb.contract(TOKEN_ABI, USDT_TRC20_CONTRACT)
+        const usdtBalance = await contract.balanceOf(address).call()
 
-      if (usdtBalance > 0 && trxBalance > 100_000_000) {
-        try {
-          const txID = await contract
-            .transfer(outgoing_wallet, usdtBalance)
-            .send({
-              feeLimit: 100_000_000,
-              callValue: 0,
-              shouldPollResponse: false,
-            })
+        if (usdtBalance > 0 && trxBalance > 100_000_000) {
+          try {
+            const txID = await contract
+              .transfer(outgoing_wallet, usdtBalance)
+              .send({
+                feeLimit: 100_000_000,
+                callValue: 0,
+                shouldPollResponse: false,
+              })
 
-          const tx = await tronWeb.trx.getTransactionInfo(txID)
-          if (tx?.result == "FAILED") {
-            console.error(`USDT claim failed for wallet ${i}: ${txID}`)
+            const tx = await tronWeb.trx.getTransactionInfo(txID)
+            if (tx?.result == "FAILED") {
+              console.error(`USDT claim failed for wallet ${i}: ${txID}`)
+            }
+          } catch (e) {
+            console.error(`USDT claim error for wallet ${i}:`, e)
           }
-        } catch (e) {
-          console.error(`USDT claim error for wallet ${i}:`, e)
         }
-      }
 
-      const remainingTrx = await tronWeb.trx.getBalance(address)
-      const txFeeEstimate = 200_000 // ~0.2 TRX for bandwidth/energy
-      const reserveSun = Math.floor(this.TRON_RESERVE_TRX * 1_000_000)
-      const sweepAmount = remainingTrx - txFeeEstimate - reserveSun
+        const remainingTrx = await tronWeb.trx.getBalance(address)
+        const txFeeEstimate = 200_000 // ~0.2 TRX for bandwidth/energy
+        const reserveSun = Math.floor(this.TRON_RESERVE_TRX * 1_000_000)
+        const sweepAmount = remainingTrx - txFeeEstimate - reserveSun
 
-      if (sweepAmount > 0) {
-        try {
-          const tx = await tronWeb.transactionBuilder.sendTrx(
-            outgoing_wallet,
-            sweepAmount as unknown as number,
-            address
-          )
-          const signedTx = await tronWeb.trx.sign(tx, privateKey)
-          const result = await tronWeb.trx.sendRawTransaction(signedTx)
-          if (!result.result) {
-            console.error(`TRX claim failed for wallet ${i}: ${JSON.stringify(result)}`)
+        if (sweepAmount > 0) {
+          try {
+            const tx = await tronWeb.transactionBuilder.sendTrx(
+              outgoing_wallet,
+              sweepAmount as unknown as number,
+              address
+            )
+            const signedTx = await tronWeb.trx.sign(tx, privateKey)
+            const result = await tronWeb.trx.sendRawTransaction(signedTx)
+            if (!result.result) {
+              console.error(`TRX claim failed for wallet ${i}: ${JSON.stringify(result)}`)
+            }
+          } catch (e) {
+            console.error(`TRX claim error for wallet ${i}:`, e)
           }
-        } catch (e) {
-          console.error(`TRX claim error for wallet ${i}:`, e)
         }
+
+      } catch (error) {
+        console.error(error)
       }
-      await sleep(1000)
     }
   }
 

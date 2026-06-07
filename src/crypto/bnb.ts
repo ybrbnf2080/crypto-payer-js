@@ -1,4 +1,3 @@
-import axios from "axios"
 import { CURRENCY_TYPE, PaymentCheckResult, PaymentProvider } from "./interface.ts"
 import { CURRENCY } from "../store.ts"
 import * as bip39 from "bip39"
@@ -9,40 +8,17 @@ import { sha256ToIndex } from "../setting.ts"
 import { sleep } from "tronweb/utils"
 
 const BSC_USDT_CONTRACT = "0x55d398326f99059fF775485246999027B3197955"
-const BSC_EXPLORER_API = "https://api.bscscan.com/api"
-
-interface BscTx {
-    hash: string
-    from: string
-    to: string
-    value: string
-    timeStamp: string
-    isError: string
-}
-
-interface BscTokenTx {
-    hash: string
-    from: string
-    to: string
-    value: string
-    timeStamp: string
-    contractAddress: string
-    tokenDecimal: string
-    isError?: string
-}
 
 export class BnbProvider implements PaymentProvider {
     private bip32Root: BIP32API
     private DERIVATION_PATH = "m/44'/60'/0'/0"
-    private BSCSCAN_API_KEY: string
     private MNEMONIC: string
     private RPC: string
     private RESERVE_BNB: number
     readonly chain_id = 56
     readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.BNB, CURRENCY.BSC_USDT]
 
-    constructor(api_key: string, MNEMONIC: string, RPC: string = "https://bsc-dataseed.binance.org", RESERVE_BNB: number = 0) {
-        this.BSCSCAN_API_KEY = api_key
+    constructor(MNEMONIC: string, RPC: string = "https://bsc-dataseed.binance.org", RESERVE_BNB: number = 0) {
         this.MNEMONIC = MNEMONIC
         this.RPC = RPC
         this.RESERVE_BNB = RESERVE_BNB
@@ -154,41 +130,41 @@ export class BnbProvider implements PaymentProvider {
         startTimeStamp: number,
     ): Promise<PaymentCheckResult> {
         await sleep(1000)
+        const provider = new ethers.JsonRpcProvider(this.RPC)
         const since = startTimeStamp
         const requiredWei = BigInt(Math.floor(value * 1e18))
+        const walletLower = wallet.toLowerCase()
 
-        const { data } = await axios.get(BSC_EXPLORER_API, {
-            params: {
-                chainid: this.chain_id,
-                action: "txlist",
-                module: "account",
-                address: wallet,
-                startblock: 0,
-                endblock: 99999999,
-                offset: 1,
-                sort: "desc",
-                apikey: this.BSCSCAN_API_KEY,
-            },
-        })
+        const balance = await provider.getBalance(walletLower)
+        if (balance < requiredWei) return { paid: false }
 
-        const txs: BscTx[] = data.result ?? []
+        const currentBlock = await provider.getBlock("latest")
+        if (!currentBlock) return { paid: false }
 
-        for (const tx of txs) {
-            const txTime = Number(tx.timeStamp) * 1000
-            const amountWei = BigInt(tx.value)
+        const sinceSeconds = Math.floor(since / 1000)
+        const elapsedSeconds = currentBlock.timestamp - sinceSeconds
+        const estimatedBlocks = Math.ceil(elapsedSeconds / 3) + 20
+        const fromBlock = Math.max(0, currentBlock.number - estimatedBlocks)
 
-            if (
-                tx.to?.toLowerCase() === wallet.toLowerCase() &&
-                tx.isError === "0" &&
-                amountWei >= requiredWei &&
-                txTime >= since
-            ) {
-                return {
-                    paid: true,
-                    txHash: tx.hash,
-                    amount: Number(amountWei) / 1e18,
+        for (let i = currentBlock.number; i >= fromBlock; i--) {
+            const block = await provider.getBlock(i, true)
+            if (!block) continue
+
+            const txs = block.transactions as unknown as ethers.TransactionResponse[]
+            for (const tx of txs) {
+                if (tx.to?.toLowerCase() === walletLower && tx.value >= requiredWei) {
+                    const receipt = await provider.getTransactionReceipt(tx.hash)
+                    if (receipt?.status === 1) {
+                        return {
+                            paid: true,
+                            txHash: tx.hash,
+                            amount: Number(tx.value) / 1e18,
+                        }
+                    }
                 }
             }
+
+            if (block.timestamp < sinceSeconds) break
         }
 
         return { paid: false }
@@ -200,41 +176,49 @@ export class BnbProvider implements PaymentProvider {
         startTimeStamp: number,
     ): Promise<PaymentCheckResult> {
         await sleep(1000)
+        const provider = new ethers.JsonRpcProvider(this.RPC)
         const since = startTimeStamp
-        // BSC USDT has 18 decimals
         const requiredAmount = BigInt(Math.floor(value * 1e18))
+        const walletLower = wallet.toLowerCase()
 
-        const { data } = await axios.get(BSC_EXPLORER_API, {
-            params: {
-                chainid: this.chain_id,
-                action: "tokentx",
-                module: "account",
-                address: wallet,
-                contractaddress: BSC_USDT_CONTRACT,
-                startblock: 0,
-                endblock: 99999999,
-                offset: 1,
-                sort: "desc",
-                apikey: this.BSCSCAN_API_KEY,
-            },
+        const currentBlock = await provider.getBlock("latest")
+        if (!currentBlock) return { paid: false }
+
+        const sinceSeconds = Math.floor(since / 1000)
+        const elapsedSeconds = currentBlock.timestamp - sinceSeconds
+        const estimatedBlocks = Math.ceil(elapsedSeconds / 3) + 20
+        const fromBlock = Math.max(0, currentBlock.number - estimatedBlocks)
+
+        const transferTopic = ethers.id("Transfer(address,address,uint256)")
+        const paddedAddress = ethers.zeroPadValue(walletLower, 32)
+
+        const logs = await provider.getLogs({
+            address: BSC_USDT_CONTRACT,
+            fromBlock,
+            toBlock: "latest",
+            topics: [transferTopic, null, paddedAddress],
         })
 
-        const txs: BscTokenTx[] = data.result ?? []
+        const iface = new ethers.Interface([
+            "event Transfer(address indexed from, address indexed to, uint256 value)",
+        ])
 
-        for (const tx of txs) {
-            const txTime = Number(tx.timeStamp) * 1000
-            const amount = BigInt(tx.value || 0)
+        for (const log of logs.reverse()) {
+            const parsed = iface.parseLog({
+                topics: log.topics as string[],
+                data: log.data,
+            })
+            if (!parsed) continue
 
-            if (
-                tx.to?.toLowerCase() === wallet.toLowerCase() &&
-                tx.contractAddress.toLowerCase() === BSC_USDT_CONTRACT.toLowerCase() &&
-                amount >= requiredAmount &&
-                txTime >= since
-            ) {
-                return {
-                    paid: true,
-                    txHash: tx.hash,
-                    amount: Number(amount) / 1e18,
+            const amount = parsed.args.value
+            if (amount >= requiredAmount) {
+                const block = await provider.getBlock(log.blockNumber)
+                if (block && block.timestamp * 1000 >= since) {
+                    return {
+                        paid: true,
+                        txHash: log.transactionHash,
+                        amount: Number(amount) / 1e18,
+                    }
                 }
             }
         }

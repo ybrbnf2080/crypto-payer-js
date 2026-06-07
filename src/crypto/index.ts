@@ -36,16 +36,16 @@ export class BlockChainProvider {
     constructor(config: BlockChainConfig) {
         this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC, config.EVM_RPC || "https://eth.drpc.org", config.EVM_RESERVE_ETH)
         this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX, config.TRON_RPC || "https://tron.api.pocket.network", config.TRON_DERIVATION_PATH)
-        this.bnb_provider = new BnbProvider(config.BSC_API_KEY || config.evm_api_key, config.MNEMONIC, config.BSC_RPC || "https://bsc-dataseed.binance.org", config.BSC_RESERVE_BNB)
+        this.bnb_provider = new BnbProvider(config.MNEMONIC, config.BSC_RPC || "https://bsc-dataseed.binance.org", config.BSC_RESERVE_BNB)
         this.btc_provider = new BitcoinProvider(config.MNEMONIC)
     }
 
     available_currency() {
-        return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.ETH]: "Etherium ETH", [CURRENCY.USDT_ETH]: "Etherium USDT", [CURRENCY.BNB]: "Binance BNB", [CURRENCY.BSC_USDT]: "Binance USDT", [CURRENCY.BTC]: "Bitcoin" }
+        return { [CURRENCY.TRX]: "Tron", [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.ETH]: "Etherium ETH", [CURRENCY.USDT_ETH]: "Etherium USDT", [CURRENCY.BTC]: "Bitcoin" }
     }
 
     withdraw_available_currency() {
-        return { [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.USDT_ETH]: "Etherium USDT", [CURRENCY.BSC_USDT]: "Binance USDT", }
+        return { [CURRENCY.USDT_TRC20]: "Tron USDT", [CURRENCY.USDT_ETH]: "Etherium USDT", }
     }
 
     checkWithdrawAvalibeCurrency(currency: CURRENCY_TYPE) {
@@ -90,9 +90,9 @@ export class BlockChainProvider {
         console.log("start claim")
         await this.evm_provider.claim(outgoing_wallet_evm, walletCount)
         await this.tron_provider.claim(outgoing_wallet_tron, walletCount)
-        if (outgoing_wallet_bsc) {
-            await this.bnb_provider.claim(outgoing_wallet_bsc, walletCount)
-        }
+        // if (outgoing_wallet_bsc) {
+        //     await this.bnb_provider.claim(outgoing_wallet_bsc, walletCount)
+        // }
         if (outgoing_wallet_btc) {
             await this.btc_provider.claim(outgoing_wallet_btc, walletCount)
         }

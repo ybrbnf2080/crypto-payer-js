@@ -265,52 +265,60 @@ export class EvmProvider implements PaymentProvider {
             "function balanceOf(address) view returns (uint256)",
             "function transfer(address,uint256) returns (bool)",
         ]
-
+        console.log("start eth claim")
         for (let i = 0; i < walletCount; i++) {
-            await sleep(1000)
-            const child = await this.getWallet(String(i))
-            if (!child.privateKey) continue
+            try {
 
-            const privateKeyHex = Buffer.from(child.privateKey).toString("hex")
-            const wallet = new ethers.Wallet(privateKeyHex, provider)
+                await sleep(1000)
+                const child = await this.getWallet(String(i))
+                if (!child.privateKey) continue
 
-            const ethBalance = await provider.getBalance(wallet.address)
-            if (ethBalance === 0n) continue
+                const privateKeyHex = Buffer.from(child.privateKey).toString("hex")
+                const wallet = new ethers.Wallet(privateKeyHex, provider)
 
-            const feeData = await provider.getFeeData()
-            const gasPrice = feeData.gasPrice ?? BigInt(1e10)
+                const ethBalance = await provider.getBalance(wallet.address)
+                if (ethBalance === 0n) continue
 
-            // Sweep USDT if any
-            const usdtContract = new ethers.Contract(USDT_CONTRACT, erc20Abi, wallet)
-            // @ts-ignore
-            const usdtBalance = await usdtContract.balanceOf(wallet.address)
-            if (usdtBalance > 0n) {
+                const feeData = await provider.getFeeData()
+                const gasPrice = feeData.gasPrice ?? BigInt(1e10)
+
+                // Sweep USDT if any
+                const usdtContract = new ethers.Contract(USDT_CONTRACT, erc20Abi, wallet)
                 // @ts-ignore
-                const usdtGasEstimate = await usdtContract.transfer.estimateGas(outgoing_wallet, usdtBalance)
-                const usdtGasCost = gasPrice * usdtGasEstimate
-                if (ethBalance > usdtGasCost) {
+                const usdtBalance = await usdtContract.balanceOf(wallet.address)
+                if (usdtBalance > 0n) {
+                    console.log(`address ${wallet.address}  amount_usdt ${usdtBalance} to ${outgoing_wallet}`)
                     // @ts-ignore
-                    const tx = await usdtContract.transfer(outgoing_wallet, usdtBalance)
+                    const usdtGasEstimate = await usdtContract.transfer.estimateGas(outgoing_wallet, usdtBalance)
+                    const usdtGasCost = gasPrice * usdtGasEstimate
+                    if (ethBalance > usdtGasCost) {
+                        // @ts-ignore
+                        const tx = await usdtContract.transfer(outgoing_wallet, usdtBalance)
+                        await tx.wait()
+                    }
+                }
+                console.log(`address ${wallet.address}  amount_eth ${ethBalance} to ${outgoing_wallet}`)
+                // Sweep remaining ETH
+                const remainingEth = await provider.getBalance(wallet.address)
+                const ethTxGasEstimate = await provider.estimateGas({
+                    from: wallet.address,
+                    to: outgoing_wallet,
+                    value: remainingEth,
+                })
+
+                const ethTxGasCost = gasPrice * ethTxGasEstimate
+                const reserveWei = BigInt(Math.floor(this.EVM_RESERVE_ETH * 1e18))
+                const sweepAmount = remainingEth - ethTxGasCost - reserveWei
+                if (sweepAmount > 0n) {
+                    const tx = await wallet.sendTransaction({
+                        to: outgoing_wallet,
+                        value: sweepAmount,
+                    })
+                    console.log(JSON.stringify(tx))
                     await tx.wait()
                 }
-            }
-
-            // Sweep remaining ETH
-            const remainingEth = await provider.getBalance(wallet.address)
-            const ethTxGasEstimate = await provider.estimateGas({
-                from: wallet.address,
-                to: outgoing_wallet,
-                value: remainingEth,
-            })
-            const ethTxGasCost = gasPrice * ethTxGasEstimate
-            const reserveWei = BigInt(Math.floor(this.EVM_RESERVE_ETH * 1e18))
-            const sweepAmount = remainingEth - ethTxGasCost - reserveWei
-            if (sweepAmount > 0n) {
-                const tx = await wallet.sendTransaction({
-                    to: outgoing_wallet,
-                    value: sweepAmount,
-                })
-                await tx.wait()
+            } catch (error) {
+                console.error(error)
             }
         }
     }
