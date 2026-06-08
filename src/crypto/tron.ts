@@ -41,6 +41,12 @@ const TOKEN_ABI = [
   }
 ];
 
+const TRON_ENERGY_API_BASE = "https://api.tronenergyrent.com"
+const USDT_ENERGY_AMOUNT = 65000
+const USDT_ENERGY_NEW_WALLET_AMOUNT = 131000
+const ENERGY_POLL_INTERVAL = 2000
+const ENERGY_POLL_TIMEOUT = 30000
+
 export class TronProvider implements PaymentProvider {
 
   private bip32Root: BIP32API
@@ -49,8 +55,9 @@ export class TronProvider implements PaymentProvider {
   private TRON_RESERVE_TRX: number
   private TRON_RPC_HOST: string
   private tronWeb: InstanceType<typeof TronWeb.TronWeb>
+  private tronEnergyApiKey: string | null
   readonly avalibe_currency: CURRENCY_TYPE[] = [CURRENCY.TRX, CURRENCY.USDT_TRC20]
-  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1, TRON_RPC_HOST: string = "https://tron.api.pocket.network", TRON_DERIVATION_PATH: string = "m/44'/195'/0'/0") {
+  constructor(TRON_MNEMONIC: string, TRON_RESERVE_TRX: number = 1, TRON_RPC_HOST: string = "https://tron.api.pocket.network", TRON_DERIVATION_PATH: string = "m/44'/195'/0'/0", TRON_ENERGY_API_KEY?: string) {
     this.TRON_MNEMONIC = TRON_MNEMONIC
     this.TRON_RESERVE_TRX = TRON_RESERVE_TRX
     this.TRON_DERIVATION_PATH = TRON_DERIVATION_PATH
@@ -59,6 +66,52 @@ export class TronProvider implements PaymentProvider {
     this.tronWeb = new TronWeb.TronWeb({
       fullHost: TRON_RPC_HOST,
     })
+    this.tronEnergyApiKey = TRON_ENERGY_API_KEY || null
+  }
+
+  private async ensureEnergy(address: string, requiredEnergy: number = USDT_ENERGY_AMOUNT): Promise<void> {
+    if (!this.tronEnergyApiKey) return
+
+    try {
+      const priceUrl = `${TRON_ENERGY_API_BASE}/calculate-energy-price?period=1h&energyAmount=${requiredEnergy}`
+      const { data: priceData } = await axios.get(priceUrl)
+      if (priceData?.status !== "SUCCESS") return
+    } catch {
+      return
+    }
+
+    const orderUrl = `${TRON_ENERGY_API_BASE}/place-energy-order`
+    const { data: orderData } = await axios.get(orderUrl, {
+      params: {
+        apiKey: this.tronEnergyApiKey,
+        period: "1h",
+        energyAmount: requiredEnergy,
+        destinationAddress: address,
+        preActivateDestinationAddress: 0,
+      },
+    })
+
+    if (orderData?.status !== "SUCCESS") return
+
+    const orderId = orderData.payload?.orderId
+    if (!orderId) return
+
+    const deadline = Date.now() + ENERGY_POLL_TIMEOUT
+    while (Date.now() < deadline) {
+      await sleep(ENERGY_POLL_INTERVAL)
+      const { data: statusData } = await axios.get(`${TRON_ENERGY_API_BASE}/single-order-details`, {
+        params: {
+          apiKey: this.tronEnergyApiKey,
+          orderId,
+        },
+      })
+
+      if (statusData?.status !== "SUCCESS") return
+
+      const state = statusData.payload?.state
+      if (state === "ENERGY_DELEGATED") return
+      if (state === "ERROR_DELEGATION" || state === "CANCELLED") return
+    }
   }
 
   async withdraw(index_key: number, out_wallet: string, amount: number, currency: CURRENCY_TYPE) {
@@ -116,6 +169,8 @@ export class TronProvider implements PaymentProvider {
     amountUSDT: number
   ): Promise<PaymentCheckResult> {
     const { privateKey, address } = await this.getAccount(index_key)
+
+    await this.ensureEnergy(address)
 
     const tronWeb = new TronWeb.TronWeb({
       fullHost: this.TRON_RPC_HOST,
@@ -324,6 +379,7 @@ export class TronProvider implements PaymentProvider {
         const usdtBalance = await contract.balanceOf(address).call()
 
         if (usdtBalance > 0 && trxBalance > 100_000_000) {
+          await this.ensureEnergy(address)
           try {
             const txID = await contract
               .transfer(outgoing_wallet, usdtBalance)

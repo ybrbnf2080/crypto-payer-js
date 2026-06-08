@@ -20,6 +20,7 @@ export interface BlockChainConfig {
     TRON_RPC?: string,
     TRON_DERIVATION_PATH?: string,
     TRON_RESERVE_TRX?: number,
+    TRON_ENERGY_API_KEY?: string,
     BSC_API_KEY?: string,
     BSC_RPC?: string,
     BSC_RESERVE_BNB?: number,
@@ -35,7 +36,7 @@ export class BlockChainProvider {
 
     constructor(config: BlockChainConfig) {
         this.evm_provider = new EvmProvider(config.evm_api_key, CHAINIDS.ETH, config.MNEMONIC, config.EVM_RPC || "https://eth.drpc.org", config.EVM_RESERVE_ETH)
-        this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX, config.TRON_RPC || "https://tron.api.pocket.network", config.TRON_DERIVATION_PATH)
+        this.tron_provider = new TronProvider(config.MNEMONIC, config.TRON_RESERVE_TRX, config.TRON_RPC || "https://tron.api.pocket.network", config.TRON_DERIVATION_PATH, config.TRON_ENERGY_API_KEY)
         this.bnb_provider = new BnbProvider(config.MNEMONIC, config.BSC_RPC || "https://bsc-dataseed.binance.org", config.BSC_RESERVE_BNB)
         this.btc_provider = new BitcoinProvider(config.MNEMONIC)
     }
